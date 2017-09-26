@@ -18,3 +18,6 @@ CNTN4, CLCN3, SNAP91, SOX2, FOXG1, and SREBF1.
 
 The SCZ GWAS are available here:
 https://www.med.unc.edu/pgc/results-and-downloads
+
+(Biological insights from 108 schizophrenia-associated genetic loci,
+Nature 2014)[https://www.ncbi.nlm.nih.gov/pubmed/25056061]
