@@ -97,6 +97,7 @@ addFootprintsCurrentRegion <- function(target.gene, target.gene.tss)
    brain.wellington20.db.uri <- sprintf("postgres://%s/%s", database.host, dbNames[4])
 
    sources <- list(brain.hint16.db.uri, brain.hint20.db.uri, brain.wellington16.db.uri, brain.wellington20.db.uri)
+   #sources <- list(brain.hint16.db.uri)
    names(sources) <- dbNames
 
    current.region <- parseChromLocString(getGenomicRegion(tv))
@@ -232,9 +233,13 @@ test.snpsInLocus <- function()
 bigModel <- function()
 {
    showGenomicRegion(tv, "chr8:142,199,164-142,392,333")
+   showGenomicRegion(tv, "chr8:142,211,080-142,404,249")
+   showGenomicRegion(tv, "chr8:142,110,003-142,496,342")
+   showGenomicRegion(tv, "chr8:142,190,000-142,440,000")
    target.gene <- "TSNARE1"
+   target.gene.tss <- 142354831
 
-   tbls.fp <- addFootprintsCurrentRegion("TSNARE1", 142354831)
+   tbls.fp <- addFootprintsCurrentRegion(target.gene, target.gene.tss)
    tbl.fp <- do.call(rbind, tbls.fp)
    rownames(tbl.fp) <- NULL
    tbl.fp$shortMotif <- tbl.fp$motifName
@@ -242,14 +247,65 @@ bigModel <- function()
    rownames(tbl.fp2) <- NULL
    tbl.fp2 <- unique(tbl.fp2)
 
+   tbl.fp3 <- associateMotifsFromFootprintDatabasesWithMotifDbTFs(tbl.fp)
+   rownames(tbl.fp3) <- NULL
+   tbl.fp3 <- unique(tbl.fp3)
+
    print(load("~/github/trenaHelpers/inst/demos/aqp4/labMeeting-22jun2017/mayo.rnaSeq.cer.and.tcx.matrices.RData"))
-   tbl.geneModel <- createGeneModel(trena, target.gene, solver.names, tbl.fp2, mtx.tcx)
-   tbl.geneModel.2 <- createGeneModel(trena, target.gene, solver.names, tbl.fp2, mtx.cer)
+   print(load("~/s/work/priceLab/cory/brainExpressionData/mtx.rosmap.normalized.RData"))
    fivenum(mtx.cer)
    fivenum(mtx.tcx)
+   fivenum(mtx.rosmap.normalized)
+
+   tbl.geneModel.1.tfc <- createGeneModel(trena, target.gene, solver.names, tbl.fp2, mtx.tcx)
+   tbl.geneModel.2.tfc <- createGeneModel(trena, target.gene, solver.names, tbl.fp2, mtx.cer)
+   tbl.geneModel.3.tfc <- createGeneModel(trena, target.gene, solver.names, tbl.fp2, mtx.rosmap.normalized)
+
+   tbl.geneModel.1.mdb <- createGeneModel(trena, target.gene, solver.names, tbl.fp3, mtx.tcx)
+   tbl.geneModel.2.mdb <- createGeneModel(trena, target.gene, solver.names, tbl.fp3, mtx.cer)
+   tbl.geneModel.3.mdb <- createGeneModel(trena, target.gene, solver.names, tbl.fp3, mtx.rosmap.normalized)
+
+   tbls <- list(tbl.geneModel.1.tfc, tbl.geneModel.2.tfc, tbl.geneModel.3.tfc,
+             tbl.geneModel.1.mdb, tbl.geneModel.2.mdb, tbl.geneModel.3.mdb)
+
+   save(tbls, file="geneModels.6.3matrices.mdb.tfc.lookup.RData")
+
+    # tfs gained at 85%, collected: ATF3 (#34 in m2), TCFL5, EPAS1 (#23 in m1), BHLHE22, BHLHE22, ID3 (#46 in m1)
+    # tfs lost at 85%,   collected: TCFL5  EPAS1, NFIX (rank 11 in geneModel.2, mtx.cer)
+
+   goi <- c("ATF3", "TCFL5", "EPAS1", "BHLHE22", "ID3", "NFIX")
+   #lapply(goi, function(g) lapply(tbls, function(tbl) match(g, tbl$gene)))
+   for(g in goi){
+      printf("rank of %s", g)
+      for(i in seq_len(length(tbls))){
+         tbl <- tbls[[i]]
+         rank <- match(g, tbl$gene)
+         if(!is.na(rank)) printf("table %d: %d", i, rank)
+         } # for i
+      } # for g
 
 
 } # bigModel
+#------------------------------------------------------------------------------------------------------------------------
+associateMotifsFromFootprintDatabasesWithMotifDbTFs <- function(tbl)
+{
+   motifs <- tbl$motifName
+   motifs <- gsub("{", "_", motifs, fixed=TRUE)
+   motifs <- gsub("}", "_", motifs, fixed=TRUE)
+   motifs.uniq <- unique(motifs)
+   tfs <- lapply(motifs.uniq, function(motif) unique(mcols(query(MotifDb, motif))$geneSymbol))
+   names(tfs) <- motifs.uniq
+   tfs.all <- tfs[motifs]
+   stopifnot(length(tfs.all) == nrow(tbl))
+   geneSymbols <- as.character(tfs.all)
+   empties <- which(geneSymbols == "character(0)")
+   if(length(empties) > 0)
+      geneSymbols[empties] <- ""
+   tbl$geneSymbol <- geneSymbols
+
+   return(tbl)
+
+} # associateMotifsFromFootprintDatabasesWithMotifDbTFs
 #------------------------------------------------------------------------------------------------------------------------
 explore.REST.motif.disruption <- function()
 {
@@ -317,12 +373,11 @@ assess.snps <- function()
    mm <- MotifMatcher("hg38", pfms)
 
    matchThreshold <- 85
-   shoulder <- 12
+   shoulder <- 10
 
    tbl.wg.trena.targetGene <- subset(tbl.wg.trena, target.gene==targetGene)
    tbl.wg.trena.targetGene <- tbl.wg.trena.targetGene[order(tbl.wg.trena.targetGene$pcaMax, decreasing=TRUE),]
    canonical.tfs <- tbl.wg.trena.targetGene$gene
-
 
    for(r in seq_len(nrow(tbl.snpsInFP))){
       rsid <- tbl.snpsInFP$rsid[r]
